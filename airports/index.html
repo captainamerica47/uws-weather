@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Airport Drive Times</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Airports">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#e9eef2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101a24" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: one phone-width column. When you leave, then one card per airport, then the hour-by-hour table. */
+:root {
+  --bg: #e9eef2;
+  --surface: #f7f9fb;
+  --ink: #14212c;
+  --muted: #5b6b78;
+  --line: #d3dce3;
+  --accent: #1f6f8b;
+  --fast: #2e7d5b;
+  --slow: #b3541f;
+  --bad: #b3361f;
+  --display: "Bricolage Grotesque", "Avenir Next", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #101a24; --surface: #18242f; --ink: #e8eef3; --muted: #93a4b1; --line: #2a3945;
+    --accent: #6cc1d8; --fast: #6fcf9f; --slow: #f0a352; --bad: #ff8a6e;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font: 16px/1.4 var(--body);
+  -webkit-font-smoothing: antialiased; -webkit-text-size-adjust: 100%;
+  padding: calc(env(safe-area-inset-top) + 14px) calc(env(safe-area-inset-right) + 18px)
+           calc(env(safe-area-inset-bottom) + 28px) calc(env(safe-area-inset-left) + 18px);
+}
+main { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.num { font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
+
+h1 { font: 600 22px var(--display); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.from { color: var(--muted); font-size: 14px; }
+h2 { font: 600 12px var(--body); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; background: var(--bg); border-radius: 11px; }
+.seg button { font: 500 15px var(--body); color: var(--muted); background: transparent; border: 0; border-radius: 8px; min-height: 40px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+.when { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+input { font: 16px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 9px; padding: 10px; min-height: 44px; width: 100%; }
+button.go { font: 600 16px var(--body); color: var(--bg); background: var(--accent); border: 0; border-radius: 10px; min-height: 48px; cursor: pointer; }
+button.plain { font: 500 15px var(--body); color: var(--accent); background: transparent; border: 1px solid var(--line); border-radius: 10px; min-height: 44px; padding: 0 14px; cursor: pointer; }
+button[disabled] { opacity: .55; }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.msg { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--bad); border-left-width: 4px; background: var(--surface); font-size: 15px; }
+
+.cards { display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: end; }
+.card.best { border-color: var(--fast); }
+.code { font: 600 26px var(--display); letter-spacing: 0.01em; }
+.name { color: var(--muted); font-size: 13.5px; }
+.mins { font: 400 46px/1 var(--display); letter-spacing: -0.03em; text-align: right; }
+.mins small { font: 500 15px var(--body); color: var(--muted); letter-spacing: 0; margin-left: 3px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; color: var(--fast); border: 1px solid var(--fast); border-radius: 999px; padding: 1px 8px; margin-left: 8px; vertical-align: 4px; }
+.range { grid-column: 1 / -1; margin-top: 10px; }
+.track { position: relative; height: 8px; border-radius: 4px; background: var(--line); }
+.track i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--fast), var(--slow)); }
+.track u { position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ink); border: 2px solid var(--surface); }
+.ends { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-top: 6px; }
+.meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; font-size: 14px; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.meta b { font-weight: 500; }
+.meta span { color: var(--muted); }
+.meta a { color: var(--accent); font-weight: 500; }
+.note { color: var(--muted); font-size: 13px; }
+
+.tablewrap { margin-bottom: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 14px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 0; text-align: right; font-size: 15px; }
+th { font: 600 13px var(--body); color: var(--muted); border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; color: var(--muted); }
+tr + tr td { border-top: 1px solid var(--line); }
+td.lo { color: var(--fast); font-weight: 600; }
+td.hi { color: var(--slow); font-weight: 600; }
+
+details { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); padding: 0 14px; }
+summary { cursor: pointer; padding: 13px 0; font-weight: 500; }
+details .inner { display: flex; flex-direction: column; gap: 12px; padding-bottom: 14px; }
+ol { margin: 0; padding-left: 20px; font-size: 14.5px; color: var(--muted); display: flex; flex-direction: column; gap: 5px; }
+ol b, ol a { color: var(--ink); font-weight: 500; }
+footer { color: var(--muted); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Airport drive times</h1>
+    <div class="from" id="fromLine"></div>
+  </header>
+
+  <section class="panel" aria-label="When you leave">
+    <div class="seg">
+      <button type="button" id="modeNow" aria-pressed="true">Leave now</button>
+      <button type="button" id="modeLater" aria-pressed="false">Pick a time</button>
+    </div>
+    <div class="when" id="whenRow" hidden>
+      <label for="day">Day<input type="date" id="day"></label>
+      <label for="clock">Leave at (New York time)<input type="time" id="clock" step="900"></label>
+    </div>
+    <button type="button" class="go" id="go">Get drive times</button>
+  </section>
+
+  <div class="msg" id="msg" hidden></div>
+
+  <section id="results" hidden>
+    <h2 id="resultsTitle">Driving time</h2>
+    <div class="cards" id="cards"></div>
+    <p class="note">The big number is Google's best estimate for that departure. The bar runs from a light-traffic day to a heavy-traffic day.</p>
+  </section>
+
+  <section id="daySection" hidden>
+    <h2 id="dayTitle">Through the day</h2>
+    <div class="tablewrap" id="dayTable" hidden></div>
+    <button type="button" class="plain" id="dayBtn">Show every hour of this day</button>
+    <p class="note" id="dayNote">Best-estimate minutes for leaving on each hour, 5 AM to 11 PM. Uses up to 57 lookups.</p>
+  </section>
+
+  <details id="settings">
+    <summary>Setup and settings</summary>
+    <div class="inner">
+      <ol id="steps">
+        <li>In <a href="https://console.cloud.google.com/google/maps-apis/start" target="_blank" rel="noopener">Google Cloud Console</a>, create a project and turn on billing.</li>
+        <li>Enable the <b>Routes API</b>.</li>
+        <li>Under Credentials, create an <b>API key</b>. Restrict it to the Routes API and to the website <b>captainamerica47.github.io/*</b>.</li>
+        <li>Paste the key below. It is saved only in this browser.</li>
+      </ol>
+      <label for="key">Google Maps API key<input type="password" id="key" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+      <label for="origin">Starting from<input type="text" id="origin" autocomplete="off"></label>
+      <button type="button" class="plain" id="save">Save</button>
+      <div class="note" id="usage"></div>
+    </div>
+  </details>
+
+  <footer>Drive times from the Google Maps Routes API.</footer>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var DEFAULT_ORIGIN = "W 72nd St & Columbus Ave, New York, NY 10023";
+  var AIRPORTS = [
+    { code: "LGA", name: "LaGuardia", address: "LaGuardia Airport, Queens, NY" },
+    { code: "JFK", name: "John F. Kennedy", address: "John F. Kennedy International Airport, Queens, NY" },
+    { code: "EWR", name: "Newark Liberty", address: "Newark Liberty International Airport, Newark, NJ" }
+  ];
+  var URL = "https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix";
+  var TZ = "America/New_York";
+  var $ = function (id) { return document.getElementById(id); };
+  var store = {
+    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  };
+  var key = store.get("air-key") || "";
+  var origin = store.get("air-origin") || DEFAULT_ORIGIN;
+  var later = false;
+
+  /* ---------- New York time helpers ---------- */
+  function nyParts(ms) {
+    var p = {}, f = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    f.formatToParts(new Date(ms)).forEach(function (x) { p[x.type] = x.value; });
+    return p;
+  }
+  // "2026-11-14" + "17:30" in New York -> epoch ms
+  function nyToMs(day, clock) {
+    var d = day.split("-"), c = clock.split(":");
+    var want = Date.UTC(+d[0], +d[1] - 1, +d[2], +c[0], +c[1]);
+    var ms = want;
+    for (var i = 0; i < 2; i++) {
+      var p = nyParts(ms);
+      ms += want - Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+    }
+    return ms;
+  }
+  function fmtTime(ms) { return new Date(ms).toLocaleTimeString("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit" }); }
+  function fmtDay(ms) { return new Date(ms).toLocaleDateString("en-US", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" }); }
+  function todayNY() { var p = nyParts(Date.now()); return p.year + "-" + p.month + "-" + p.day; }
+
+  /* ---------- Google Routes ---------- */
+  function countUse(n) {
+    var m = todayNY().slice(0, 7), u = {};
+    try { u = JSON.parse(store.get("air-use") || "{}"); } catch (e) {}
+    if (u.m !== m) u = { m: m, n: 0 };
+    u.n += n; store.set("air-use", JSON.stringify(u)); showUse();
+  }
+  function showUse() {
+    var u = {}; try { u = JSON.parse(store.get("air-use") || "{}"); } catch (e) {}
+    var n = u.m === todayNY().slice(0, 7) ? u.n : 0;
+    $("usage").textContent = "About " + n.toLocaleString("en-US") + " of 5,000 free monthly lookups used from this device.";
+  }
+  function matrix(model, departMs) {
+    var body = {
+      origins: [{ waypoint: { address: origin } }],
+      destinations: AIRPORTS.map(function (a) { return { waypoint: { address: a.address } }; }),
+      travelMode: "DRIVE", routingPreference: "TRAFFIC_AWARE_OPTIMAL", trafficModel: model
+    };
+    if (departMs) body.departureTime = new Date(departMs).toISOString();
+    return fetch(URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask": "originIndex,destinationIndex,duration,staticDuration,distanceMeters,condition,status" },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().catch(function () { return null; }).then(function (j) {
+        if (!res.ok) {
+          var e = Array.isArray(j) ? j[0] : j, m = e && e.error && e.error.message;
+          throw new Error(m || ("Google returned an error (" + res.status + ")."));
+        }
+        countUse(AIRPORTS.length);
+        var out = [];
+        (j || []).forEach(function (el) {
+          if (el.condition === "ROUTE_EXISTS" && el.duration) {
+            out[el.destinationIndex || 0] = { sec: parseFloat(el.duration), free: parseFloat(el.staticDuration || el.duration), meters: el.distanceMeters || 0 };
+          }
+        });
+        return out;
+      });
+    });
+  }
+  function explain(err) {
+    var m = String(err && err.message || err);
+    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return "Could not reach Google. Check your connection, then try again.";
+    if (/API key not valid|API_KEY_INVALID/i.test(m)) return "Google did not accept the API key. Check it under Setup and settings.";
+    if (/referer|referrer/i.test(m)) return "The API key's website restriction is blocking this page. Allow captainamerica47.github.io/* on the key.";
+    if (/has not been used|is disabled|not enabled|blocked/i.test(m)) return "The Routes API is not enabled for this key. Enable it in Google Cloud Console, wait a minute, then try again.";
+    if (/billing/i.test(m)) return "Google needs billing turned on for this project before the Routes API will answer.";
+    return "Google could not answer: " + m;
+  }
+
+  /* ---------- UI ---------- */
+  function say(t) { $("msg").textContent = t || ""; $("msg").hidden = !t; }
+  function mins(sec) { return Math.round(sec / 60); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+  function mapsLink(a) {
+    return "https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=" + encodeURIComponent(origin) + "&destination=" + encodeURIComponent(a.address);
+  }
+
+  function chosenDepart() {
+    if (!later) return null;
+    if (!$("day").value || !$("clock").value) throw new Error("PICK");
+    var ms = nyToMs($("day").value, $("clock").value);
+    if (ms < Date.now() + 60000) throw new Error("PAST");
+    return ms;
+  }
+
+  function renderCards(best, lo, hi, departMs) {
+    var start = departMs || Date.now();
+    var top = 0, fastest = -1, fastSec = Infinity;
+    AIRPORTS.forEach(function (a, i) {
+      if (!best[i]) return;
+      top = Math.max(top, best[i].sec, hi[i] ? hi[i].sec : 0);
+      if (best[i].sec < fastSec) { fastSec = best[i].sec; fastest = i; }
+    });
+    $("cards").innerHTML = AIRPORTS.map(function (a, i) {
+      var b = best[i];
+      if (!b) return '<div class="card"><div><div class="code">' + a.code + '</div><div class="name">' + a.name + '</div></div><div class="name">No route found</div></div>';
+      var l = Math.min(lo[i] ? lo[i].sec : b.sec, b.sec), h = Math.max(hi[i] ? hi[i].sec : b.sec, b.sec);
+      var delay = mins(b.sec) - mins(b.free);
+      return '<div class="card' + (i === fastest ? " best" : "") + '">' +
+        '<div><div class="code">' + a.code + (i === fastest ? '<span class="tag">Quickest</span>' : "") + '</div><div class="name">' + a.name + "</div></div>" +
+        '<div class="mins num">' + mins(b.sec) + "<small>min</small></div>" +
+        '<div class="range"><div class="track"><i style="left:' + (l / top * 100).toFixed(1) + "%;width:" + Math.max((h - l) / top * 100, 2).toFixed(1) + '%"></i>' +
+        '<u style="left:' + (b.sec / top * 100).toFixed(1) + '%"></u></div>' +
+        '<div class="ends num"><span>Light traffic ' + mins(l) + " min</span><span>Heavy " + mins(h) + " min</span></div></div>" +
+        '<div class="meta"><div><span>Arrive </span><b class="num">' + fmtTime(start + b.sec * 1000) + "</b><span> · " + (b.meters / 1609.34).toFixed(1) + " mi" +
+        (delay >= 2 ? " · " + delay + " min of traffic" : "") + '</span></div><a href="' + esc(mapsLink(a)) + '" target="_blank" rel="noopener">Open in Maps</a></div></div>';
+    }).join("");
+    $("resultsTitle").textContent = departMs ? "Leaving " + fmtDay(departMs) + " at " + fmtTime(departMs) : "Leaving now, " + fmtTime(Date.now());
+    $("results").hidden = false;
+    $("daySection").hidden = false;
+    $("dayTable").hidden = true;
+    $("dayTitle").textContent = "Through the day, " + fmtDay(start);
+  }
+
+  function lookup() {
+    if (!key) { $("settings").open = true; say("Add your Google Maps API key under Setup and settings first."); return; }
+    var depart;
+    try { depart = chosenDepart(); }
+    catch (e) { say(e.message === "PAST" ? "That time has already passed. Pick a later time." : "Pick a day and a time."); return; }
+    say(""); $("go").disabled = true; $("go").textContent = "Checking traffic";
+    Promise.all([matrix("BEST_GUESS", depart), matrix("OPTIMISTIC", depart), matrix("PESSIMISTIC", depart)])
+      .then(function (r) { renderCards(r[0], r[1], r[2], depart); })
+      .catch(function (e) { say(explain(e)); })
+      .then(function () { $("go").disabled = false; $("go").textContent = "Get drive times"; });
+  }
+
+  function wholeDay() {
+    var day = later && $("day").value ? $("day").value : todayNY();
+    var slots = [];
+    for (var h = 5; h <= 23; h++) {
+      var ms = nyToMs(day, (h < 10 ? "0" : "") + h + ":00");
+      if (ms > Date.now() + 60000) slots.push({ h: h, ms: ms });
+    }
+    if (!slots.length) { say("No hours left today. Pick another day."); return; }
+    say(""); $("dayBtn").disabled = true; $("dayBtn").textContent = "Checking each hour";
+    var rows = [], next = 0, failed = null;
+    function worker() {
+      if (failed || next >= slots.length) return Promise.resolve();
+      var s = slots[next++];
+      return matrix("BEST_GUESS", s.ms).then(function (r) { rows.push({ h: s.h, r: r }); return worker(); }, function (e) { failed = e; });
+    }
+    Promise.all([worker(), worker(), worker(), worker()]).then(function () {
+      if (failed && !rows.length) { say(explain(failed)); return; }
+      rows.sort(function (a, b) { return a.h - b.h; });
+      var lo = [], hi = [];
+      AIRPORTS.forEach(function (a, i) {
+        var v = rows.map(function (x) { return x.r[i] ? mins(x.r[i].sec) : null; }).filter(function (x) { return x != null; });
+        lo[i] = Math.min.apply(null, v); hi[i] = Math.max.apply(null, v);
+      });
+      var html = "<table><thead><tr><th>Leave at</th>" + AIRPORTS.map(function (a) { return "<th>" + a.code + "</th>"; }).join("") + "</tr></thead><tbody>";
+      rows.forEach(function (x) {
+        html += "<tr><td>" + (x.h % 12 || 12) + (x.h < 12 ? " AM" : " PM") + "</td>" + AIRPORTS.map(function (a, i) {
+          if (!x.r[i]) return "<td>n/a</td>";
+          var m = mins(x.r[i].sec), c = hi[i] > lo[i] ? (m === lo[i] ? "lo" : m === hi[i] ? "hi" : "") : "";
+          return '<td class="num ' + c + '">' + m + "</td>";
+        }).join("") + "</tr>";
+      });
+      $("dayTable").innerHTML = html + "</tbody></table>";
+      $("dayTable").hidden = false;
+      $("dayTitle").textContent = "Through the day, " + fmtDay(slots[0].ms) + " (minutes)";
+      if (failed) say("Some hours could not be loaded. " + explain(failed));
+    }).then(function () { $("dayBtn").disabled = false; $("dayBtn").textContent = "Show every hour of this day"; });
+  }
+
+  function setMode(l) {
+    later = l;
+    $("modeNow").setAttribute("aria-pressed", String(!l));
+    $("modeLater").setAttribute("aria-pressed", String(l));
+    $("whenRow").hidden = !l;
+  }
+  function paintOrigin() { $("fromLine").textContent = "From " + origin.replace(/, New York, NY.*$/, ""); }
+
+  // Defaults: today, next quarter hour
+  (function () {
+    var p = nyParts(Date.now() + 30 * 60000), m = Math.floor(+p.minute / 15) * 15;
+    $("day").value = p.year + "-" + p.month + "-" + p.day;
+    $("day").min = todayNY();
+    $("clock").value = p.hour + ":" + (m < 10 ? "0" : "") + m;
+  })();
+  $("key").value = key; $("origin").value = origin;
+  paintOrigin(); showUse();
+  if (!key) $("settings").open = true;
+
+  $("modeNow").addEventListener("click", function () { setMode(false); });
+  $("modeLater").addEventListener("click", function () { setMode(true); });
+  $("go").addEventListener("click", lookup);
+  $("dayBtn").addEventListener("click", wholeDay);
+  $("save").addEventListener("click", function () {
+    key = $("key").value.trim(); origin = $("origin").value.trim() || DEFAULT_ORIGIN;
+    store.set("air-key", key); store.set("air-origin", origin);
+    $("origin").value = origin; paintOrigin(); say("");
+    if (key) { $("settings").open = false; lookup(); }
+  });
+  if (key) lookup();
+})();
+</script>
+</body>
+</html>
